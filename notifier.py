@@ -1,0 +1,41 @@
+import os
+import logging
+from typing import List, Dict
+from twilio.rest import Client
+
+logger = logging.getLogger(__name__)
+
+def format_sms_body(prices: List[Dict[str, str]]) -> str:
+    """遵循极简要求组合短信，确保前 3 家油站信息合在一条发，去除一切 Emoji 和特殊符号以防运营商拦截"""
+    if not prices:
+        return "Costco Gas Error: No prices found or DOM changed."
+        
+    lines = ["Costco Gas Update:"]
+    for i, data in enumerate(prices, 1):
+        lines.append(f"{i}. {data['city']}: Reg {data['reg']}, Pre {data['pre']}")
+        
+    return "\n".join(lines)
+
+def send_sms(body: str) -> bool:
+    """透过 Twilio SDK 对目标手机投递生成的简报"""
+    try:
+        account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+        auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+        from_number = os.environ.get("TWILIO_FROM_NUMBER")
+        to_number = os.environ.get("TO_PHONE_NUMBER")
+
+        if not all([account_sid, auth_token, from_number, to_number]):
+            logger.error("缺少 Twilio 相关的环境变量配置！请检查您的系统设定 (或 .env 文件)。")
+            return False
+
+        client = Client(account_sid, auth_token)
+        message = client.messages.create(
+            body=body,
+            from_=from_number,
+            to=to_number
+        )
+        logger.info(f"✅ 短信发送成功, 消息 SID: {message.sid}")
+        return True
+    except Exception as e:
+        logger.error(f"❌ 发送短信失败，请校验凭证正确性: {e}")
+        return False
