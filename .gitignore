@@ -24,3 +24,6 @@ __pycache__/
 *$py.class
 
 # Temporary test files (optional, leaving out python test files since user might want them)
+
+# Debug outputs
+debug_data/

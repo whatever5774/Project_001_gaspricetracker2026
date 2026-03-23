@@ -1,3 +1,8 @@
+"""
+主程序入口：Costco 油价监控脚本 (Main Entry Node)
+负责调度抓取任务、记录日志，并在获取油价后触发 Twilio 短信通知。
+主要由 GitHub Actions 每日自动触发运行。
+"""
 import asyncio
 import os
 import logging
@@ -16,12 +21,16 @@ async def main():
     # 本地测试时，将自动寻找并载入处于同一层级的 .env 记录
     load_dotenv()
     
-    # 直接访问最近的 3 家门市的 URL
-    target_urls = [
-        "https://www.costco.com/w/-/ca/chino%20hills/473",
-        "https://www.costco.com/w/-/ca/ontario-bus-ctr-ontario/947",
-        "https://www.costco.com/w/-/ca/eastvale/1317"
-    ]
+    # 优先使用 .env 中配置的 COSTCO_TARGET_URLS，如果没有则使用默认门市
+    env_urls = os.environ.get("COSTCO_TARGET_URLS")
+    if env_urls:
+        target_urls = [url.strip() for url in env_urls.split(",") if url.strip()]
+    else:
+        target_urls = [
+            "https://www.costco.com/w/-/ca/chino%20hills/473",
+            "https://www.costco.com/w/-/ca/ontario-bus-ctr-ontario/947",
+            "https://www.costco.com/w/-/ca/eastvale/1317"
+        ]
     
     logger.info(f"🚗 开始执行 Costco 直连油价抓取任务。目标门市数: {len(target_urls)}")
     

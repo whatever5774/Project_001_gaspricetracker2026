@@ -1,3 +1,8 @@
+"""
+消息推送模块：Twilio SMS 客户端
+封装了短信的格式化逻辑和发送逻辑，用于将提取到的油价简报直发至目标手机。
+依赖环境变量中配置的 TWILIO 密钥和手机号。
+"""
 import os
 import logging
 from typing import List, Dict

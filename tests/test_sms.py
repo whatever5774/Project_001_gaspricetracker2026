@@ -1,3 +1,6 @@
+"""
+测试与调试辅助脚本：用于测试各个独立组件与流程的行为 (Test/Debug Script)
+"""
 from dotenv import load_dotenv
 import logging
 from notifier import send_sms, format_sms_body

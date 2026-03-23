@@ -1,3 +1,8 @@
+"""
+前端页面抓取模块：Costco 油价防反爬逻辑
+使用 playwright-stealth 模拟真实的人类浏览器操作，直接访问指定 Costco 门店页面，
+提取 Regular 与 Premium 标号的汽油价格，并格式化返回。
+"""
 import asyncio
 import random
 import logging
@@ -55,15 +60,21 @@ async def fetch_gas_prices(urls: List[str]) -> List[Dict[str, str]]:
                 reg_price = "暂无数据"
                 pre_price = "暂无数据"
                 
-                # 提取 Regular
-                reg_match = re.search(r'Regular</dt><dd[^>]*><span[^>]*>\$([0-9.]+)', content_text, re.IGNORECASE)
-                if reg_match:
-                    reg_price = f"${reg_match.group(1)}9" # 补足 .9 尾巴
+                # 提取 Regular (动态获取完整的页面显示的文本，去除硬代码 .9)
+                try:
+                    reg_elem = page.locator("dt:has-text('Regular') + dd").first
+                    if await reg_elem.count() > 0:
+                        reg_price = (await reg_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
+                except Exception as e:
+                    logger.debug(f"Regular price locate error: {e}")
                     
-                # 提取 Premium    
-                pre_match = re.search(r'Premium</dt><dd[^>]*><span[^>]*>\$([0-9.]+)', content_text, re.IGNORECASE)
-                if pre_match:
-                    pre_price = f"${pre_match.group(1)}9" # 补足 .9 尾巴
+                # 提取 Premium (动态获取完整的页面显示的文本，去除硬代码 .9)
+                try:
+                    pre_elem = page.locator("dt:has-text('Premium') + dd").first
+                    if await pre_elem.count() > 0:
+                        pre_price = (await pre_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
+                except Exception as e:
+                    logger.debug(f"Premium price locate error: {e}")
                     
                 if reg_price != "暂无数据" or pre_price != "暂无数据":
                     results.append({
