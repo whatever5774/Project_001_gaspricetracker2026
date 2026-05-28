@@ -9,7 +9,7 @@ import logging
 import re
 from typing import List, Dict
 from playwright.async_api import async_playwright
-from playwright_stealth import Stealth
+from playwright_stealth import stealth_async
 
 logger = logging.getLogger(__name__)
 
@@ -21,20 +21,17 @@ async def fetch_gas_prices(urls: List[str]) -> List[Dict[str, str]]:
         browser = await p.chromium.launch(
             headless=False,
             args=[
-                "--disable-http2",
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-setuid-sandbox"
             ]
         )
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             viewport={"width": 1920, "height": 1080},
             locale="en-US"
         )
         page = await context.new_page()
-        stealth_plugin = Stealth()
-        await stealth_plugin.apply_stealth_async(page)
+        await stealth_async(page)
         
         try:
             for i, target_url in enumerate(urls):
