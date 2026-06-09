@@ -4,9 +4,8 @@
 主要由 GitHub Actions 每日自动触发运行。
 """
 import asyncio
-import os
 import logging
-from dotenv import load_dotenv
+from config import TARGET_URLS
 from scraper import fetch_gas_prices
 from notifier import format_sms_body, send_sms
 
@@ -18,25 +17,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 async def main():
-    # 本地测试时，将自动寻找并载入处于同一层级的 .env 记录
-    load_dotenv()
-    
-    # 优先使用 .env 中配置的 COSTCO_TARGET_URLS，如果没有则使用默认门市
-    env_urls = os.environ.get("COSTCO_TARGET_URLS")
-    if env_urls:
-        target_urls = [url.strip() for url in env_urls.split(",") if url.strip()]
-    else:
-        target_urls = [
-            "https://www.costco.com/w/-/ca/chino%20hills/473",
-            "https://www.costco.com/w/-/ca/ontario-bus-ctr-ontario/947",
-            "https://www.costco.com/w/-/ca/eastvale/1317"
-        ]
-    
-    logger.info(f"🚗 开始执行 Costco 直连油价抓取任务。目标门市数: {len(target_urls)}")
-    
+    logger.info(f"🚗 开始执行 Costco 直连油价抓取任务。目标门市数: {len(TARGET_URLS)}")
+
     try:
         # 执行抓取
-        prices = await fetch_gas_prices(target_urls)
+        prices = await fetch_gas_prices(TARGET_URLS)
         
         # 如果未取到任何相关门市的标价，进行预警
         if not prices:
