@@ -57,19 +57,19 @@ async def fetch_gas_prices(urls: List[str]) -> List[Dict[str, str]]:
                 reg_price = "暂无数据"
                 pre_price = "暂无数据"
                 
-                # 提取 Regular (动态获取完整的页面显示的文本，去除硬代码 .9)
+                # 提取 Regular
                 try:
                     reg_elem = page.locator("dt:has-text('Regular') + dd").first
-                    if await reg_elem.count() > 0:
-                        reg_price = (await reg_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
+                    await reg_elem.wait_for(state="visible", timeout=10000)
+                    reg_price = (await reg_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
                 except Exception as e:
                     logger.debug(f"Regular price locate error: {e}")
-                    
-                # 提取 Premium (动态获取完整的页面显示的文本，去除硬代码 .9)
+
+                # 提取 Premium
                 try:
                     pre_elem = page.locator("dt:has-text('Premium') + dd").first
-                    if await pre_elem.count() > 0:
-                        pre_price = (await pre_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
+                    await pre_elem.wait_for(state="visible", timeout=10000)
+                    pre_price = (await pre_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
                 except Exception as e:
                     logger.debug(f"Premium price locate error: {e}")
                     
