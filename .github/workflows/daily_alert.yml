@@ -47,4 +47,4 @@ jobs:
         TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
         TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
         TO_PHONE_NUMBER: ${{ secrets.TO_PHONE_NUMBER }}
-      run: cd src && python main.py
+      run: cd src && xvfb-run python main.py
