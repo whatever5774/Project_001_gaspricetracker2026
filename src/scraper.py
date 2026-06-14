@@ -1,10 +1,9 @@
 """
 前端页面抓取模块：Costco 油价防反爬逻辑
-使用 playwright-stealth 模拟真实的人类浏览器操作，直接访问指定 Costco 门店页面，
-提取 Regular 与 Premium 标号的汽油价格，并格式化返回。
+通过访问 Costco 门店页面建立浏览器会话，然后调用内部 AjaxGetGasPricesService API
+直接获取 JSON 格式油价数据，不再依赖 DOM 选择器。
 """
 import asyncio
-import random
 import logging
 import re
 from typing import List, Dict
@@ -13,68 +12,75 @@ from playwright_stealth import stealth_async
 
 logger = logging.getLogger(__name__)
 
+
+def _warehouse_id(url: str) -> str:
+    """从 URL 末尾提取仓库 ID，例如 /473 → 473"""
+    m = re.search(r'/(\d+)$', url.rstrip('/'))
+    if not m:
+        raise ValueError(f"无法从 URL 提取 warehouse ID: {url}")
+    return m.group(1)
+
+
+def _city_name(url: str) -> str:
+    """从 URL 路径中提取城市名，例如 /ca/chino%20hills/473 → Chino Hills"""
+    segment = url.rstrip('/').split('/')[-2]
+    return segment.replace('%20', ' ').replace('-', ' ').title()
+
+
 async def fetch_gas_prices(urls: List[str]) -> List[Dict[str, str]]:
-    """通过直接访问 Costco 门店独立 URL，抓取油价"""
+    """通过 AjaxGetGasPricesService API 直接获取每家门市的油价"""
     results = []
-    
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=False,
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
-                "--disable-setuid-sandbox"
-            ]
+                "--disable-setuid-sandbox",
+            ],
         )
         context = await browser.new_context(
             viewport={"width": 1920, "height": 1080},
-            locale="en-US"
+            locale="en-US",
         )
         page = await context.new_page()
         await stealth_async(page)
-        
+
         try:
+            # 先访问第一个仓库页面建立浏览器会话（API 需要合法 session cookie）
+            first_url = urls[0]
+            logger.info(f"建立会话: 访问 {first_url}")
+            await page.goto(first_url, wait_until="domcontentloaded", timeout=60000)
+            await asyncio.sleep(8)
+
             for i, target_url in enumerate(urls):
-                logger.info(f"访问门店页面 [{i+1}/{len(urls)}]: {target_url}")
-                await page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
-                
-                # 第一个页面给予较多时间用于处理可能出现的人机验证
-                if i == 0:
-                    logger.info("如果遇到防护，请在弹出的浏览器中手动点按确认 (限时 60 秒) ...")
-                    await asyncio.sleep(15)
-                else:
-                    await asyncio.sleep(8)
-                    
-                content_text = await page.content()
-                
-                # 解析门店名称 (可以从 URL 推断或从 title 推断)
-                city_match = re.search(r'<title>(.*?)Warehouse.*?Costco</title>', content_text, re.IGNORECASE)
-                if city_match:
-                    city_name = city_match.group(1).strip()
-                else:
-                    city_name = target_url.split('/')[-2].replace('%20', ' ').title()
-                    logger.warning(f"未能从 title 解析门店名称，回退到 URL 推断: {city_name}")
+                wid = _warehouse_id(target_url)
+                city = _city_name(target_url)
+                logger.info(f"查询油价 [{i+1}/{len(urls)}]: {city} (ID: {wid})")
 
-                # 提取 Regular — 让异常直接冒泡暴露 DOM 变化
-                reg_elem = page.locator("dt:has-text('Regular') + dd").first
-                await reg_elem.wait_for(state="visible", timeout=10000)
-                reg_price = (await reg_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
+                resp = await page.evaluate(
+                    f'async () => {{ const r = await fetch("/AjaxGetGasPricesService?warehouseid={wid}"); return await r.json(); }}'
+                )
 
-                # 提取 Premium
-                pre_elem = page.locator("dt:has-text('Premium') + dd").first
-                await pre_elem.wait_for(state="visible", timeout=10000)
-                pre_price = (await pre_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
+                data = resp.get(wid, {}) if isinstance(resp, dict) else {}
+                reg = data.get("regular")
+                pre = data.get("premium")
+
+                if reg is None and pre is None:
+                    logger.warning(f"API 未返回 {city} 的油价数据: {resp}")
+                    continue
 
                 results.append({
-                    "city": city_name,
-                    "reg": reg_price,
-                    "pre": pre_price
+                    "city": city,
+                    "reg": f"${reg}" if reg else "N/A",
+                    "pre": f"${pre}" if pre else "N/A",
                 })
-                logger.info(f"成功提取 -> {city_name}: Reg {reg_price}, Pre {pre_price}")
-                    
+                logger.info(f"成功提取 -> {city}: Reg ${reg}, Pre ${pre}")
+
         except Exception as e:
-            logger.error(f"抓取流程遭遇错误或连接超时: {e}", exc_info=True)
+            logger.error(f"抓取流程遭遇错误: {e}", exc_info=True)
         finally:
             await browser.close()
-            
+
     return results
