@@ -53,38 +53,27 @@ async def fetch_gas_prices(urls: List[str]) -> List[Dict[str, str]]:
                     city_name = city_match.group(1).strip()
                 else:
                     city_name = target_url.split('/')[-2].replace('%20', ' ').title()
-                
-                reg_price = "暂无数据"
-                pre_price = "暂无数据"
-                
-                # 提取 Regular
-                try:
-                    reg_elem = page.locator("dt:has-text('Regular') + dd").first
-                    await reg_elem.wait_for(state="visible", timeout=10000)
-                    reg_price = (await reg_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
-                except Exception as e:
-                    logger.debug(f"Regular price locate error: {e}")
+                    logger.warning(f"未能从 title 解析门店名称，回退到 URL 推断: {city_name}")
+
+                # 提取 Regular — 让异常直接冒泡暴露 DOM 变化
+                reg_elem = page.locator("dt:has-text('Regular') + dd").first
+                await reg_elem.wait_for(state="visible", timeout=10000)
+                reg_price = (await reg_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
 
                 # 提取 Premium
-                try:
-                    pre_elem = page.locator("dt:has-text('Premium') + dd").first
-                    await pre_elem.wait_for(state="visible", timeout=10000)
-                    pre_price = (await pre_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
-                except Exception as e:
-                    logger.debug(f"Premium price locate error: {e}")
-                    
-                if reg_price != "暂无数据" or pre_price != "暂无数据":
-                    results.append({
-                        "city": city_name,
-                        "reg": reg_price,
-                        "pre": pre_price
-                    })
-                    logger.info(f"成功提取 -> {city_name}: Reg {reg_price}, Pre {pre_price}")
-                else:
-                    logger.warning(f"页面未找到 {city_name} 的油价信息。")
+                pre_elem = page.locator("dt:has-text('Premium') + dd").first
+                await pre_elem.wait_for(state="visible", timeout=10000)
+                pre_price = (await pre_elem.inner_text()).replace('\n', '').replace(' ', '').strip()
+
+                results.append({
+                    "city": city_name,
+                    "reg": reg_price,
+                    "pre": pre_price
+                })
+                logger.info(f"成功提取 -> {city_name}: Reg {reg_price}, Pre {pre_price}")
                     
         except Exception as e:
-            logger.error(f"抓取流程遭遇错误或连接超时: {e}")
+            logger.error(f"抓取流程遭遇错误或连接超时: {e}", exc_info=True)
         finally:
             await browser.close()
             
