@@ -25,5 +25,8 @@ __pycache__/
 
 # Temporary test files (optional, leaving out python test files since user might want them)
 
+# Price cache (runtime state, managed by GitHub Actions cache)
+prices_cache.json
+
 # Debug outputs
 debug_data/

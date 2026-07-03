@@ -1,18 +1,17 @@
-name: Costco Gas Price Monitor
+name: Costco Gas Weekly Report
 
 on:
   schedule:
-    # 每天 2 次：太平洋时间 8:00 AM (UTC 15:00) + 8:00 PM (UTC 03:00)
-    - cron: '0 15 * * *'
-    - cron: '0 3 * * *'
-  # 允许手动在 GitHub Action UI 触发
+    # 每周五太平洋时间 8:00 AM (UTC 15:00)
+    - cron: '0 15 * * 5'
+  # 允许手动触发
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  scrape-and-notify:
+  weekly-report:
     runs-on: ubuntu-latest
 
     steps:
@@ -50,7 +49,7 @@ jobs:
         playwright install chromium
         npx playwright install-deps
 
-    - name: Run Scraper
+    - name: Run Weekly Report
       env:
         ZIP_CODE: ${{ secrets.ZIP_CODE }}
         TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
@@ -60,7 +59,7 @@ jobs:
         GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
         GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         REPORT_TO_EMAIL: ${{ secrets.REPORT_TO_EMAIL }}
-      run: cd src && xvfb-run python main.py
+      run: cd src && xvfb-run python main.py --weekly-report
 
     - name: Commit price history
       run: |
