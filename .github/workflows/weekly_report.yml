@@ -2,8 +2,9 @@ name: Costco Gas Weekly Report
 
 on:
   schedule:
-    # 每周五太平洋时间 8:00 AM (UTC 15:00)
-    - cron: '0 15 * * 5'
+    # 每周五太平洋时间 9:00 AM (UTC 16:00)
+    # NOTE: 与 daily_alert (UTC 15:00) 错开 1 小时，避免 git push 竞态
+    - cron: '0 16 * * 5'
   # 允许手动触发
   workflow_dispatch:
 
@@ -35,9 +36,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: src/prices_cache.json
-        key: gas-prices-cache-${{ github.run_id }}
+        key: gas-prices-cache-weekly
         restore-keys: |
-          gas-prices-cache-
+          gas-prices-cache-weekly
 
     - name: Install dependencies
       run: |

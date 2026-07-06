@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Costco Gas Price Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 40px 20px 30px;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #f7971e, #ffd200);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        header p {
+            color: #888;
+            font-size: 0.95rem;
+        }
+
+        /* Current prices cards */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        .card .city {
+            font-size: 0.85rem;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 6px;
+        }
+
+        .card .price {
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: #f7971e;
+        }
+
+        .card .price small {
+            font-size: 1rem;
+            font-weight: 400;
+            color: #666;
+            margin-left: 4px;
+        }
+
+        .card .premium {
+            font-size: 0.9rem;
+            color: #777;
+            margin-top: 4px;
+        }
+
+        /* Chart */
+        .chart-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+        }
+
+        .chart-card h2 {
+            font-size: 1.1rem;
+            color: #ccc;
+            margin-bottom: 16px;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            width: 100%;
+            height: 400px;
+        }
+
+        canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* Loading / error states */
+        .status {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .status.error {
+            color: #e74c3c;
+        }
+
+        .status .icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: #555;
+            font-size: 0.8rem;
+        }
+
+        footer a {
+            color: #888;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            color: #f7971e;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            header h1 {
+                font-size: 1.5rem;
+            }
+            .card .price {
+                font-size: 1.8rem;
+            }
+            .chart-wrapper {
+                height: 280px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⛽ Costco Gas Price Tracker</h1>
+            <p id="last-updated">Loading...</p>
+        </header>
+
+        <div class="cards" id="cards">
+            <div class="status"><div class="icon">⏳</div>Loading price data...</div>
+        </div>
+
+        <div class="chart-card">
+            <h2>Regular Gas Price Trends</h2>
+            <div class="chart-wrapper">
+                <canvas id="priceChart"></canvas>
+            </div>
+        </div>
+
+        <footer>
+            <p>Data refreshed twice daily · <a href="https://github.com/whatever5774" target="_blank">GitHub</a></p>
+        </footer>
+    </div>
+
+    <script>
+        (async function () {
+            const CSV_URL = 'price_history.csv';
+
+            // Color palette for cities
+            const COLORS = {
+                'Chino Hills': '#f7971e',
+                'Ontario Bus Ctr Ontario': '#4fc3f7',
+                'Eastvale': '#81c784',
+            };
+
+            async function loadData() {
+                const resp = await fetch(CSV_URL);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+                const text = await resp.text();
+                return parseCSV(text);
+            }
+
+            function parseCSV(text) {
+                const lines = text.trim().split('\n');
+                if (lines.length < 2) return [];
+
+                const headers = lines[0].split(',');
+                const rows = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const cols = lines[i].split(',');
+                    if (cols.length < 4) continue;
+                    rows.push({
+                        timestamp: cols[0],
+                        city: cols[1],
+                        reg: parseFloat(cols[2]),
+                        pre: parseFloat(cols[3]),
+                    });
+                }
+                return rows;
+            }
+
+            function getLatestPrices(rows) {
+                const latest = {};
+                for (const row of rows) {
+                    if (!latest[row.city] || row.timestamp > latest[row.city].timestamp) {
+                        latest[row.city] = row;
+                    }
+                }
+                return latest;
+            }
+
+            function renderCards(latest) {
+                const container = document.getElementById('cards');
+                const cities = Object.keys(latest);
+
+                if (cities.length === 0) {
+                    container.innerHTML = '<div class="status"><div class="icon">📭</div>No price data yet.</div>';
+                    return;
+                }
+
+                container.innerHTML = cities.map(city => {
+                    const d = latest[city];
+                    return `
+                        <div class="card">
+                            <div class="city">${city}</div>
+                            <div class="price">$${d.reg.toFixed(2)}<small>Regular</small></div>
+                            <div class="premium">Premium: $${d.pre.toFixed(2)}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                // Update last-updated
+                const timestamps = cities.map(c => latest[c].timestamp);
+                const maxTs = timestamps.sort().reverse()[0];
+                document.getElementById('last-updated').textContent =
+                    `Last updated: ${formatDate(maxTs)}`;
+            }
+
+            function renderChart(rows) {
+                const ctx = document.getElementById('priceChart').getContext('2d');
+                const cities = [...new Set(rows.map(r => r.city))];
+                const timestamps = [...new Set(rows.map(r => r.timestamp))].sort();
+
+                const datasets = cities.map(city => {
+                    const cityRows = rows.filter(r => r.city === city);
+                    // Map each timestamp to its price (or null if missing)
+                    const data = timestamps.map(ts => {
+                        const match = cityRows.find(r => r.timestamp === ts);
+                        return match ? match.reg : null;
+                    });
+
+                    return {
+                        label: city,
+                        data: data,
+                        borderColor: COLORS[city] || '#ccc',
+                        backgroundColor: (COLORS[city] || '#ccc') + '20',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 6,
+                        tension: 0.3,
+                        fill: false,
+                        spanGaps: true,
+                    };
+                });
+
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: timestamps.map(formatDate),
+                        datasets: datasets,
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    color: '#aaa',
+                                    usePointStyle: true,
+                                    padding: 20,
+                                },
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(30, 30, 50, 0.95)',
+                                titleColor: '#ccc',
+                                bodyColor: '#eee',
+                                borderColor: 'rgba(255,255,255,0.15)',
+                                borderWidth: 1,
+                                callbacks: {
+                                    label: function (ctx) {
+                                        return ` ${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}`;
+                                    }
+                                }
+                            },
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    color: '#666',
+                                    maxTicksLimit: 12,
+                                    maxRotation: 45,
+                                },
+                                grid: {
+                                    color: 'rgba(255,255,255,0.05)',
+                                },
+                            },
+                            y: {
+                                ticks: {
+                                    color: '#666',
+                                    callback: v => '$' + v.toFixed(2),
+                                },
+                                grid: {
+                                    color: 'rgba(255,255,255,0.05)',
+                                },
+                            },
+                        },
+                    },
+                });
+            }
+
+            function formatDate(iso) {
+                // Convert ISO timestamp to readable date
+                try {
+                    const d = new Date(iso);
+                    return d.toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                    });
+                } catch {
+                    return iso;
+                }
+            }
+
+            // Main
+            try {
+                const rows = await loadData();
+
+                if (rows.length === 0) {
+                    document.getElementById('cards').innerHTML =
+                        '<div class="status"><div class="icon">📭</div>No price data yet — check back after the first scrape.</div>';
+                    document.getElementById('last-updated').textContent = 'Waiting for first data point...';
+                    return;
+                }
+
+                const latest = getLatestPrices(rows);
+                renderCards(latest);
+                renderChart(rows);
+            } catch (err) {
+                document.getElementById('cards').innerHTML =
+                    `<div class="status error"><div class="icon">⚠️</div>Failed to load price data.<br><small>${err.message}</small></div>`;
+                document.getElementById('last-updated').textContent = 'Error loading data';
+                console.error(err);
+            }
+        })();
+    </script>
+</body>
+</html>

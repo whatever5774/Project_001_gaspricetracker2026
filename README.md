@@ -30,7 +30,7 @@ A Python-based automated solution to fetch official daily gas prices from specif
 - **Subsequent runs**: Compares current vs cached Regular prices for Ontario & Eastvale
 - **Price change ≥ $0.05**: Sends SMS with old → new comparison
 - **No change**: Logs "价格未变" (price unchanged), skips SMS
-- **Friday 8 AM**: Sends weekly email report with all 3 stores' current prices
+- **Friday 9 AM**: Sends weekly email report with all 3 stores' current prices
 
 ## Directory Structure
 
@@ -166,7 +166,7 @@ Costco Gas Price Change:
 - Updates `docs/price_history.csv` automatically
 
 ### Weekly Report (`weekly_report.yml`)
-- Runs **every Friday at 8:00 AM** Pacific Time
+- Runs **every Friday at 9:00 AM** Pacific Time
 - Sends email with all 3 stores' current prices via Gmail SMTP
 
 Both workflows can also be triggered manually via the Actions tab (`workflow_dispatch`).

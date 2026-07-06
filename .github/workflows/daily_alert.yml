@@ -36,9 +36,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: src/prices_cache.json
-        key: gas-prices-cache-${{ github.run_id }}
+        key: gas-prices-cache-daily
         restore-keys: |
-          gas-prices-cache-
+          gas-prices-cache-daily
 
     - name: Install dependencies
       run: |
