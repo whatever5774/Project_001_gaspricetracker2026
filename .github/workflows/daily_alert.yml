@@ -32,14 +32,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    - name: Restore price cache
-      uses: actions/cache@v4
-      with:
-        path: src/prices_cache.json
-        key: gas-prices-cache-daily
-        restore-keys: |
-          gas-prices-cache-daily
-
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -47,8 +39,7 @@ jobs:
 
     - name: Ensure Playwright browsers are installed
       run: |
-        playwright install chromium
-        npx playwright install-deps
+        playwright install --with-deps chromium
 
     - name: Run Scraper
       env:
@@ -60,12 +51,11 @@ jobs:
         GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
         GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         REPORT_TO_EMAIL: ${{ secrets.REPORT_TO_EMAIL }}
-      run: cd src && xvfb-run python main.py
+      run: cd src && python main.py
 
-    - name: Commit price history
+    - name: Commit price history & cache
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add docs/price_history.csv
-        git diff --staged --quiet || git commit -m "📊 Update price history [skip ci]"
-        git push
+        git add docs/price_history.csv src/prices_cache.json
+        git diff --staged --quiet || (git commit -m "📊 Update price history & cache [skip ci]" && git pull --rebase origin main && git push origin main)
