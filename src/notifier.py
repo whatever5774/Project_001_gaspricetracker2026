@@ -1,76 +1,179 @@
 """
-消息推送模块：Twilio SMS 客户端 + Gmail 周报邮件
-封装了短信的格式化逻辑和发送逻辑，以及通过 Gmail SMTP 发送周报邮件。
-依赖环境变量中配置的 TWILIO 密钥、手机号以及 Gmail 凭证。
+消息推送模块：微信推送 (企业微信群机器人 / PushPlus / Server酱) + 邮件 + 短信
+支持富文本 Markdown 排版与静态看板链接跳转。
 """
+import json
 import logging
 import smtplib
+import urllib.request
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import List, Dict
-from twilio.rest import Client
+from typing import List, Dict, Optional
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from config import (
+    WECHAT_WEBHOOK_URL, PUSHPLUS_TOKEN, SERVERCHAN_KEY, DASHBOARD_URL,
     TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, TO_PHONE_NUMBER,
     GMAIL_ADDRESS, GMAIL_APP_PASSWORD, REPORT_TO_EMAIL,
 )
 
 logger = logging.getLogger(__name__)
+PT = ZoneInfo("America/Los_Angeles")
 
 
-def format_sms_body(prices: List[Dict[str, str]]) -> str:
-    """遵循极简要求组合短信，确保前 3 家油站信息合在一条发，去除一切 Emoji
-    和特殊符号以防运营商拦截"""
-    if not prices:
-        return "Costco Gas Error: No prices found or DOM changed."
-
-    lines = ["Costco Gas Update:"]
-    for i, data in enumerate(prices, 1):
-        lines.append(f"{i}. {data['city']}: Reg {data['reg']}, Pre {data['pre']}")
-
-    return "\n".join(lines)
+def _now_str() -> str:
+    """返回太平洋时间格式化字符串"""
+    return datetime.now(PT).strftime("%Y-%m-%d %H:%M PT")
 
 
-def format_change_sms(changes: List[Dict]) -> str:
-    """将价格变动详情格式化为新旧对比短信：
-    Costco Gas Price Change:
-    1. Ontario: $4.59 → $4.69 (+$0.10)
-    2. Eastvale: $4.55 → $4.60 (+$0.05)
+# ══════════════════════════════════════════════════════════════
+# 微信推送核心实现 (企业微信 Webhook / PushPlus / Server酱)
+# ══════════════════════════════════════════════════════════════
+
+def send_wechat(title: str, markdown_content: str) -> bool:
     """
-    if not changes:
-        return ""
+    统一微信推送接口：优先通过配置的渠道发送 Markdown 消息
+    支持：
+    1. 企业微信群机器人 (WECHAT_WEBHOOK_URL)
+    2. PushPlus 推送加 (PUSHPLUS_TOKEN)
+    3. Server酱 Turbo (SERVERCHAN_KEY)
+    """
+    success = False
+    has_any_channel = False
+    ssl_ctx = ssl.create_default_context()
 
-    lines = ["Costco Gas Price Change:"]
-    for i, ch in enumerate(changes, 1):
-        lines.append(f"{i}. {ch['city']}: {ch['old_reg']} → {ch['new_reg']} ({ch['diff']})")
+    # 1. 企业微信群机器人 Webhook
+    if WECHAT_WEBHOOK_URL:
+        has_any_channel = True
+        try:
+            payload = json.dumps({
+                "msgtype": "markdown",
+                "markdown": {
+                    "content": f"### {title}\n\n{markdown_content}"
+                }
+            }, ensure_ascii=False).encode("utf-8")
+            req = urllib.request.Request(
+                WECHAT_WEBHOOK_URL,
+                data=payload,
+                headers={"Content-Type": "application/json; charset=utf-8"}
+            )
+            with urllib.request.urlopen(req, context=ssl_ctx, timeout=10) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                if res_data.get("errcode") == 0:
+                    logger.info("✔ 企业微信机器人消息推送成功")
+                    success = True
+                else:
+                    logger.error(f"企业微信机器人返回错误: {res_data}")
+        except Exception as e:
+            logger.error(f"发送企业微信机器人通知失败: {e}")
 
-    return "\n".join(lines)
+    # 2. PushPlus 推送加 (微信服务号通知)
+    if PUSHPLUS_TOKEN:
+        has_any_channel = True
+        try:
+            payload = json.dumps({
+                "token": PUSHPLUS_TOKEN,
+                "title": title,
+                "content": markdown_content,
+                "template": "markdown"
+            }, ensure_ascii=False).encode("utf-8")
+            req = urllib.request.Request(
+                "https://www.pushplus.plus/send",
+                data=payload,
+                headers={"Content-Type": "application/json; charset=utf-8"}
+            )
+            with urllib.request.urlopen(req, context=ssl_ctx, timeout=10) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                if res_data.get("code") == 200:
+                    logger.info("✔ PushPlus 微信通知推送成功")
+                    success = True
+                else:
+                    logger.error(f"PushPlus 推送返回错误: {res_data}")
+        except Exception as e:
+            logger.error(f"发送 PushPlus 微信通知失败: {e}")
 
+    # 3. Server酱 Turbo (微信服务号通知)
+    if SERVERCHAN_KEY:
+        has_any_channel = True
+        try:
+            payload = json.dumps({
+                "title": title,
+                "desp": markdown_content
+            }, ensure_ascii=False).encode("utf-8")
+            req = urllib.request.Request(
+                f"https://sctapi.ftqq.com/{SERVERCHAN_KEY}.send",
+                data=payload,
+                headers={"Content-Type": "application/json; charset=utf-8"}
+            )
+            with urllib.request.urlopen(req, context=ssl_ctx, timeout=10) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                if res_data.get("code") == 0:
+                    logger.info("✔ Server酱微信通知推送成功")
+                    success = True
+                else:
+                    logger.error(f"Server酱返回错误: {res_data}")
+        except Exception as e:
+            logger.error(f"发送 Server酱通知失败: {e}")
 
-def send_sms(body: str) -> bool:
-    """透过 Twilio SDK 对目标手机投递生成的简报"""
-    try:
-        if not all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, TO_PHONE_NUMBER]):
-            logger.error("缺少 Twilio 相关的环境变量配置！请检查您的系统设定 (或 .env 文件)。")
-            return False
-
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        message = client.messages.create(
-            body=body,
-            from_=TWILIO_FROM_NUMBER,
-            to=TO_PHONE_NUMBER
+    if not has_any_channel:
+        logger.warning(
+            "未配置任何微信推送环境变量！请在 GitHub Secrets 或 .env 中设置 "
+            "WECHAT_WEBHOOK_URL(企微机器人) / PUSHPLUS_TOKEN / SERVERCHAN_KEY 之一。"
         )
-        logger.info(f"短信发送成功, 消息 SID: {message.sid}")
-        return True
-    except Exception as e:
-        logger.error(f"发送短信失败，请校验凭证正确性: {e}")
         return False
 
+    return success
+
+
+def format_change_wechat(changes: List[Dict], current_prices: List[Dict[str, str]]) -> str:
+    """格式化价格变动微信 Markdown 消息"""
+    lines = [
+        f"> 🕒 更新时间: {_now_str()}",
+        "",
+        "#### 📢 价格变动重点门市:",
+    ]
+    for ch in changes:
+        color = "warning" if "+" in ch["diff"] else "info"
+        lines.append(f"- **{ch['city']}**: {ch['old_reg']} → **{ch['new_reg']}** (`{ch['diff']}`)")
+
+    lines.append("")
+    lines.append("#### ⛽ 当前全门店实时油价:")
+    for item in current_prices:
+        lines.append(f"- **{item['city']}**: Reg `{item['reg']}` | Pre `{item['pre']}`")
+
+    lines.append("")
+    lines.append(f"> 📊 [点击打开油价历史走势看板]({DASHBOARD_URL})")
+
+    return "\n".join(lines)
+
+
+def format_weekly_wechat(prices: List[Dict[str, str]]) -> str:
+    """格式化周报微信 Markdown 消息"""
+    lines = [
+        f"> 🕒 统计时间: {_now_str()}",
+        "",
+        "#### ⛽ 本周全门店最新油价看板:",
+    ]
+    for item in prices:
+        lines.append(f"- **{item['city']}**: Regular `{item['reg']}` | Premium `{item['pre']}`")
+
+    lines.append("")
+    lines.append(f"> 📊 [点击打开油价历史走势看板]({DASHBOARD_URL})")
+
+    return "\n".join(lines)
+
+
+# ══════════════════════════════════════════════════════════════
+# 兼容性备用支持：邮件与短信
+# ══════════════════════════════════════════════════════════════
 
 def send_email(subject: str, body: str) -> bool:
-    """透过 Gmail SMTP (smtplib) 发送邮件，使用 App Password 认证"""
+    """透过 Gmail SMTP (smtplib) 发送邮件"""
     try:
         if not all([GMAIL_ADDRESS, GMAIL_APP_PASSWORD, REPORT_TO_EMAIL]):
-            logger.error("缺少 Gmail SMTP 相关的环境变量配置！")
+            logger.warning("未配置完整 Gmail SMTP 环境变量，跳过邮件发送。")
             return False
 
         msg = MIMEMultipart()
@@ -83,7 +186,7 @@ def send_email(subject: str, body: str) -> bool:
             server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
             server.sendmail(GMAIL_ADDRESS, REPORT_TO_EMAIL, msg.as_string())
 
-        logger.info(f"周报邮件发送成功 -> {REPORT_TO_EMAIL}")
+        logger.info(f"邮件发送成功 -> {REPORT_TO_EMAIL}")
         return True
     except Exception as e:
         logger.error(f"发送邮件失败: {e}")
@@ -91,22 +194,41 @@ def send_email(subject: str, body: str) -> bool:
 
 
 def format_weekly_report(prices: List[Dict[str, str]]) -> str:
-    """格式化周报邮件正文，包含所有门店当前油价"""
+    """格式化周报邮件纯文本内容"""
     if not prices:
         return "Costco Gas Weekly Report\n\nNo price data available this week."
 
     lines = [
         "Costco Gas Weekly Report",
         "=" * 30,
+        f"Time: {_now_str()}",
         "",
     ]
-
     for item in prices:
         lines.append(f"  {item['city']}:")
         lines.append(f"    Regular: {item['reg']}")
         lines.append(f"    Premium: {item['pre']}")
         lines.append("")
 
+    lines.append(f"Dashboard: {DASHBOARD_URL}")
     lines.append("=" * 30)
-    lines.append("Sent by Costco Gas Price Tracker")
     return "\n".join(lines)
+
+
+def send_sms(body: str) -> bool:
+    """可选 Twilio 短信备用"""
+    try:
+        if not all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, TO_PHONE_NUMBER]):
+            return False
+        from twilio.rest import Client
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        message = client.messages.create(
+            body=body,
+            from_=TWILIO_FROM_NUMBER,
+            to=TO_PHONE_NUMBER
+        )
+        logger.info(f"短信发送成功, 消息 SID: {message.sid}")
+        return True
+    except Exception as e:
+        logger.error(f"发送短信失败: {e}")
+        return False

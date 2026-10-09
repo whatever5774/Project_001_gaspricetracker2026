@@ -43,6 +43,10 @@ jobs:
 
     - name: Run Scraper
       env:
+        WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
+        PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
+        DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
         ZIP_CODE: ${{ secrets.ZIP_CODE }}
         TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
         TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
