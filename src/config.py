@@ -13,10 +13,10 @@ PUSHPLUS_TOKEN = os.environ.get("PUSHPLUS_TOKEN")
 # 3. Server酱 Turbo (微信服务号推送: https://sct.ftqq.com/)
 SERVERCHAN_KEY = os.environ.get("SERVERCHAN_KEY")
 
-# 静态看板地址 (GitHub Pages 托管)
+# 静态看板地址 (Cloudflare Pages 托管)
 DASHBOARD_URL = os.environ.get(
     "DASHBOARD_URL",
-    "https://whatever5774.github.io/Project_001_gaspricetracker2026/"
+    "https://costco-gas-tracker.pages.dev"
 )
 
 # ── Twilio 凭证 (可选，保留向后兼容) ─────────────────────
