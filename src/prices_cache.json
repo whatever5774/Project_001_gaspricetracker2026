@@ -1,12 +1,12 @@
 {
-  "last_updated": "2026-10-13T02:55:54.596960-07:00",
+  "last_updated": "2026-10-13T13:26:33.047927-07:00",
   "prices": {
     "Chino Hills": {
-      "reg": "5.759",
-      "pre": "6.059"
+      "reg": "5.659",
+      "pre": "5.959"
     },
     "Ontario Bus Ctr Ontario": {
-      "reg": "5.779",
+      "reg": "5.659",
       "pre": "6.059"
     },
     "Eastvale": {
